@@ -1,0 +1,220 @@
+#include <Ticker.h> //时钟库
+Ticker timer1;  //定义时钟1 名字随意
+Ticker timer2; //定义时钟2
+
+#include <ESP8266WiFi.h>
+#define MAX_SRV_CLIENTS 2    //定义可连接的客户端数目最大值 不能超过2个
+
+WiFiServer server(23);//服务器端口23
+WiFiClient serverClients[MAX_SRV_CLIENTS];
+
+int cc = 6000;//延时触发数值
+String aa = "";//接收到客户端的数据
+String bb = "";//接收到客户端的数据只要前4位
+int an1=0;//记录按钮1状态 松开时候是0  判断是否被按过，被按过就不继续执行
+int an2=0;//记录按钮2状态 松开时候是0  判断是否被按过，被按过就不继续执行
+int an3=0;//记录按钮3状态 松开时候是0  判断是否被按过，被按过就不继续执行
+int kg=0;//开关状态
+int dd=6000;//用于停止后恢复原来的状态
+void anniu1();//按钮1处理事件
+void anniu2();//按钮2处理事件
+void anniu3();//按钮3处理事件
+void setup()
+{
+ Serial.begin(115200);
+   pinMode(2, OUTPUT);//定义led的2脚为输出模式 
+    pinMode(14, INPUT);//定义14脚是输入按键1
+   pinMode(12, INPUT);//定义12脚是输入按键2
+   pinMode(13, INPUT);//定义13脚是输入按键3
+digitalWrite(4, HIGH);//输出高电位可控硅截止
+digitalWrite(2, HIGH);
+timer1.attach_ms(1, key);//初始化时钟1，子函数名随意
+timer2.attach_ms(1, chuli); //初始化时钟2，子函数名随意
+  WiFi.mode(WIFI_AP);//设置模式为AP
+  IPAddress softLocal(192,168,168,110);
+  IPAddress softGateway(192,168,168,110);
+  IPAddress softSubnet(255,255,255,0);
+  WiFi.softAPConfig(softLocal, softGateway, softSubnet);//配置ap的网络参数
+  WiFi.softAP("myap", "likelike");//启用软ap
+  Serial.print(WiFi.softAPIP());//获得apIP    
+  Serial.println(" 23' to connect");
+
+  uint8_t i = 0;
+  while (WiFi.status() != WL_CONNECTED && i++ < 20) delay(500);
+  if(i == 21){ //超时（20x500=10000,10秒钟），提示连接失败
+  }
+  //启动UART传输和服务器
+  server.begin();
+  server.setNoDelay(true);
+  Serial.print("localip:");
+  Serial.println(WiFi.localIP());//获得本地IP 
+  pinMode(4, OUTPUT);//定义pwm控制的4脚为输出模式
+   pinMode(5, INPUT);//定义5脚是输入检查过零
+}
+
+void key()
+{
+anniu1();
+anniu2();
+anniu3(); 
+}
+void chuli()
+{
+  uint8_t i;
+  //检测服务器端是否有活动的客户端连接
+  if (server.hasClient()){
+    for(i = 0; i < MAX_SRV_CLIENTS; i++){
+      //查找空闲或者断开连接的客户端，并置为可用
+      if (!serverClients[i] || !serverClients[i].connected()){
+        if(serverClients[i]) serverClients[i].stop();
+        serverClients[i] = server.available();
+        Serial.print("New client: "); Serial.println(i);
+        continue;
+      }
+    }
+    //若没有可用客户端，则停止连接
+    WiFiClient serverClient = server.available();
+    serverClient.stop();
+  }
+  //检查客户端的数据
+  for(i = 0; i < MAX_SRV_CLIENTS; i++){
+    if (serverClients[i] && serverClients[i].connected()){
+      if(serverClients[i].available()){
+        //从Telnet客户端获取数据，并推送到串口
+        while(serverClients[i].available())
+        {
+         aa+= char(serverClients[i].read());
+         //delay(2);
+         }
+      
+  if (aa.length() > 0)
+    {
+   bb=aa.substring(0,4);
+     cc =bb.toInt();//在此把comdata转化成INT型数值,以备后续使用
+        Serial.println(cc);  
+       aa = "";//  必须在此把comdata设为空字符,否则会导致前后字符串叠加
+    }
+       
+    }   
+    }
+  }
+  //检查串口发来的数据
+  if(Serial.available()){
+    size_t len = Serial.available();
+    uint8_t sbuf[len];
+    Serial.readBytes(sbuf, len);
+    //将串口数据推送到所有已连接的telnet客户端，实现双向通信
+    for(i = 0; i < MAX_SRV_CLIENTS; i++){
+      if (serverClients[i] && serverClients[i].connected()){
+        serverClients[i].write(sbuf, len);
+        // delay(1);
+      }
+    }
+  } 
+}
+void loop()
+{
+ 
+  if(! digitalRead(5))
+{
+if(cc!=9500)
+{
+digitalWrite(4, HIGH);//输出高电位可控硅截止
+digitalWrite(2, HIGH); 
+delayMicroseconds(cc);//延时触发导通
+digitalWrite(4, LOW);//输出低电位可控硅导通
+digitalWrite(2, LOW); 
+
+}
+else 
+{
+digitalWrite(4, HIGH);//输出高电位可控硅截止
+digitalWrite(2, HIGH);
+}
+}
+
+}
+void anniu1()
+{
+ if(! digitalRead(14))//读io14状态是否低电平
+{
+timer1.attach_ms(1, key);
+if(an1==0)//如果按钮1没被按过
+{
+  if(cc<4000)
+{
+  cc=0;
+}
+  if (cc >= 1000  && cc!=9500)//延时数大于1000
+{
+ 
+cc=cc-1000;
+
+  an1=1;//更改状态按键1按过了
+}
+}
+}
+else
+{
+timer1.attach_ms(200, key);
+an1=0;//更改状态按键1没有被按过
+}   
+}
+void anniu2()
+{
+ if(! digitalRead(12))//读io12状态是否低电平
+{
+  timer1.attach_ms(1, key);
+if(an2==0)//如果按钮2没被按过
+{
+  if (kg == 0)//开关也没打开
+{
+cc=dd;
+  kg =1; //开关打开了
+  an2=1;//更改状态按键2按过了
+ 
+}
+else if (kg == 1)//开关打开了
+{
+  dd=cc;
+cc=9500;//这个数值会停止
+      kg =0;//更改状态开关关闭了
+      an2=1;//更改状态按键2按过了
+}  
+}
+}
+else
+{
+timer1.attach_ms(200, key);
+an2=0;//更改状态按键2没有按过
+
+}
+}
+
+void anniu3()
+{
+ if(! digitalRead(13))//读io13状态是否低电平
+{
+timer1.attach_ms(1, key);
+if(an3==0)//如果按钮3没被按过
+{
+  if(cc<4000)
+{
+  cc=4000;
+}
+  if (cc <= 8000 )//延时数小于8000
+{
+ 
+cc=cc+1000;
+
+  an3=1;//更改状态按键3按过了
+}
+}
+}
+else
+{
+timer1.attach_ms(200, key);
+an3=0;//更改状态按键1没有被按过
+
+}   
+}
